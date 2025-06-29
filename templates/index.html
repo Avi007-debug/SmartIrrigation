@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🌿 Smart Irrigation Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(to bottom, #e8f5e9, #f1f8e9);
+      padding: 30px;
+      text-align: center;
+      color: #2e7d32;
+    }
+    header {
+      margin-bottom: 30px;
+    }
+    header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 5px;
+    }
+    header p {
+      font-size: 1rem;
+      color: #4caf50;
+    }
+    .card {
+      background: #ffffff;
+      padding: 20px;
+      margin: 0 auto 30px;
+      border-radius: 15px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      max-width: 500px;
+      font-size: 1.1rem;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px 20px;
+      align-items: center;
+    }
+    .card span {
+      font-weight: bold;
+      color: #1b5e20;
+    }
+    .card svg {
+      width: 24px;
+      height: 24px;
+      stroke: #66bb6a;
+    }
+    .chart-container {
+      max-width: 800px;
+      height: 400px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+      position: relative;
+    }
+    .chart-toggle {
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .chart-toggle label {
+      margin: 0 10px;
+      font-size: 0.9rem;
+      color: #2e7d32;
+    }
+    .controls {
+      margin-top: 20px;
+    }
+    .controls button {
+      margin: 5px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      background: #43a047;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    .controls button:hover {
+      background: #2e7d32;
+    }
+    #action { font-size: 1.2rem; font-weight: bold; color: #388e3c; }
+    #action.off { color: #d32f2f; }
+    #mode { font-weight: bold; color: #5e35b1; }
+    @media (max-width: 600px) {
+      body { padding: 15px; }
+      .card, .chart-container { max-width: 95%; }
+      header h1 { font-size: 1.8rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🌱 Smart Irrigation System</h1>
+    <p>Live Sensor Monitoring Dashboard</p>
+  </header>
+
+  <div class="card">
+    <i data-lucide="cloud-rain"></i> <p>Rain Intensity: <span id="rain">--</span>%</p>
+    <i data-lucide="droplet"></i> <p>Soil Moisture: <span id="soil">--</span>%</p>
+    <i data-lucide="thermometer"></i> <p>Temperature: <span id="temp">--</span> °C</p>
+    <i data-lucide="wind"></i> <p>Humidity: <span id="hum">--</span>%</p>
+    <i data-lucide="power"></i> <p>Pump State: <span id="action">--</span></p>
+    <i data-lucide="cpu"></i> <p>Control Mode: <span id="mode">--</span></p>
+  </div>
+
+  <div class="controls">
+    <button onclick="sendCommand('ON')">Pump ON</button>
+    <button onclick="sendCommand('OFF')">Pump OFF</button>
+    <button onclick="resetAI()">Reset AI</button>
+  </div>
+
+  <div class="chart-container">
+    <div class="chart-toggle">
+      <label><input type="checkbox" checked onchange="toggleDataset(0)"> Rain</label>
+      <label><input type="checkbox" checked onchange="toggleDataset(1)"> Soil</label>
+      <label><input type="checkbox" checked onchange="toggleDataset(2)"> Temp</label>
+      <label><input type="checkbox" checked onchange="toggleDataset(3)"> Hum</label>
+    </div>
+    <canvas id="sensorChart"></canvas>
+  </div>
+
+  <div style="margin-top: 20px;">
+    <button onclick="downloadChart()">📸 Download Chart</button>
+    <button onclick="downloadCSV()">📄 Download CSV</button>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    const ctx = document.getElementById('sensorChart').getContext('2d');
+    const sensorChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Rain Intensity', data: [], borderColor: '#1e88e5', backgroundColor: 'rgba(30,136,229,0.1)', tension: 0.3, pointRadius: 4, fill: true },
+          { label: 'Soil Moisture', data: [], borderColor: '#43a047', backgroundColor: 'rgba(67,160,71,0.1)', tension: 0.3, pointRadius: 4, fill: true },
+          { label: 'Temperature (°C)', data: [], borderColor: '#e53935', backgroundColor: 'rgba(229,57,53,0.1)', tension: 0.3, pointRadius: 4, fill: true },
+          { label: 'Humidity (%)', data: [], borderColor: '#8e24aa', backgroundColor: 'rgba(142,36,170,0.1)', tension: 0.3, pointRadius: 4, fill: true }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 1000, easing: 'easeOutQuart' },
+        plugins: {
+          legend: { display: true, labels: { usePointStyle: true, color: '#333' } },
+          tooltip: {
+            mode: 'index', intersect: false,
+            backgroundColor: '#fff', titleColor: '#000', bodyColor: '#000',
+            borderColor: '#ccc', borderWidth: 1
+          }
+        },
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#333' } },
+          x: { ticks: { color: '#333' } }
+        }
+      }
+    });
+
+    function updateDashboard() {
+      fetch('/data')
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('rain').textContent = data.rain;
+          document.getElementById('soil').textContent = data.soil;
+          document.getElementById('temp').textContent = data.temp;
+          document.getElementById('hum').textContent = data.hum;
+          document.getElementById('action').textContent = data.action;
+          document.getElementById('mode').textContent = data.mode;
+          document.getElementById('action').className = data.action === 'OFF' ? 'off' : '';
+
+          const now = new Date().toLocaleTimeString();
+          const maxPoints = 10;
+
+          sensorChart.data.labels.push(now);
+          sensorChart.data.datasets[0].data.push(parseInt(data.rain) || 0);
+          sensorChart.data.datasets[1].data.push(parseInt(data.soil) || 0);
+          sensorChart.data.datasets[2].data.push(parseFloat(data.temp) || 0);
+          sensorChart.data.datasets[3].data.push(parseFloat(data.hum) || 0);
+
+          if (sensorChart.data.labels.length > maxPoints) {
+            sensorChart.data.labels.shift();
+            sensorChart.data.datasets.forEach(ds => ds.data.shift());
+          }
+          sensorChart.update();
+        });
+    }
+
+    function sendCommand(cmd) {
+      fetch('/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd })
+      });
+    }
+
+    function resetAI() {
+      fetch('/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: null })
+      });
+    }
+
+    function toggleDataset(index) {
+      const chart = sensorChart;
+      const meta = chart.getDatasetMeta(index);
+      meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+      chart.update();
+    }
+
+    function downloadChart() {
+      const link = document.createElement('a');
+      link.download = 'sensor_chart.png';
+      link.href = document.getElementById('sensorChart').toDataURL('image/png');
+      link.click();
+    }
+
+    function downloadCSV() {
+      const labels = sensorChart.data.labels;
+      const rain = sensorChart.data.datasets[0].data;
+      const soil = sensorChart.data.datasets[1].data;
+      const temp = sensorChart.data.datasets[2].data;
+      const hum = sensorChart.data.datasets[3].data;
+
+      let csv = 'Time,Rain,Soil,Temperature,Humidity\n';
+      for (let i = 0; i < labels.length; i++) {
+        csv += `${labels[i]},${rain[i] || ''},${soil[i] || ''},${temp[i] || ''},${hum[i] || ''}\n`;
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'sensor_data.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    setInterval(updateDashboard, 2100);
+    updateDashboard();
+  </script>
+</body>
+</html>
